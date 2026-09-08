@@ -28,6 +28,11 @@ class GreetingScreenshotTest {
           completedStepsCount = 5,
           totalStepsCount = 18,
           lightningCount = 2,
+          currentRound = 12,
+          keepScreenOn = true,
+          onIncrementRound = {},
+          onDecrementRound = {},
+          onToggleKeepScreenOn = {},
           onResetClicked = {}
         )
       }

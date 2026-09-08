@@ -4,6 +4,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,14 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +49,7 @@ import com.example.ui.theme.HellfireOrange
 import com.example.ui.theme.LightningGold
 import com.example.ui.theme.PackAPunchCyan
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
@@ -55,6 +58,11 @@ fun HeroBanner(
   completedStepsCount: Int,
   totalStepsCount: Int,
   lightningCount: Int,
+  currentRound: Int,
+  keepScreenOn: Boolean,
+  onIncrementRound: () -> Unit,
+  onDecrementRound: () -> Unit,
+  onToggleKeepScreenOn: () -> Unit,
   onResetClicked: () -> Unit,
   modifier: Modifier = Modifier
 ) {
@@ -73,7 +81,7 @@ fun HeroBanner(
       contentDescription = "Rex Infernus Banner Artwork",
       modifier = Modifier
         .fillMaxWidth()
-        .height(200.dp),
+        .height(235.dp),
       contentScale = ContentScale.Crop
     )
 
@@ -81,12 +89,12 @@ fun HeroBanner(
     Box(
       modifier = Modifier
         .fillMaxWidth()
-        .height(200.dp)
+        .height(235.dp)
         .background(
           Brush.verticalGradient(
             colors = listOf(
               Color(0x770C0A14),
-              Color(0xCC0C0A14),
+              Color(0xDD0C0A14),
               Color(0xFF0C0A14)
             )
           )
@@ -97,8 +105,9 @@ fun HeroBanner(
     Column(
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 14.dp)
+        .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+      // Top row: Brand tags + Screen-on toggle + Reset button
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -120,7 +129,7 @@ fun HeroBanner(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
               )
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Surface(
               shape = RoundedCornerShape(6.dp),
               color = PackAPunchCyan.copy(alpha = 0.15f)
@@ -135,77 +144,110 @@ fun HeroBanner(
             }
           }
 
-          Spacer(modifier = Modifier.height(4.dp))
+          Spacer(modifier = Modifier.height(2.dp))
 
           Text(
             text = "REX INFERNUS",
             color = TextPrimary,
-            fontSize = 24.sp,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Black,
-            letterSpacing = 1.5.sp
-          )
-
-          Text(
-            text = "Live Main Quest & Survival Guide",
-            color = AetherPurple,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium
+            letterSpacing = 1.2.sp
           )
         }
 
-        IconButton(
-          onClick = onResetClicked,
-          modifier = Modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(Color(0x33FFFFFF))
-            .testTag("reset_progress_button")
+        // Action Buttons Row (Keep Screen On + Reset)
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-          Icon(
-            imageVector = Icons.Default.Refresh,
-            contentDescription = "รีเซ็ตความคืบหน้า",
-            tint = TextPrimary,
-            modifier = Modifier.size(20.dp)
-          )
+          // Keep Screen On Toggle Button
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = if (keepScreenOn) Color(0x33FFD700) else Color(0x22FFFFFF),
+            border = androidx.compose.foundation.BorderStroke(
+              1.dp,
+              if (keepScreenOn) LightningGold.copy(alpha = 0.7f) else Color(0x33FFFFFF)
+            ),
+            modifier = Modifier
+              .clip(RoundedCornerShape(10.dp))
+              .clickable { onToggleKeepScreenOn() }
+              .testTag("keep_screen_on_button")
+          ) {
+            Row(
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.Default.Lightbulb,
+                contentDescription = "เปิดจอค้าง",
+                tint = if (keepScreenOn) LightningGold else TextMuted,
+                modifier = Modifier.size(16.dp)
+              )
+              Spacer(modifier = Modifier.width(4.dp))
+              Text(
+                text = if (keepScreenOn) "จอตลอด" else "จอดับปกติ",
+                color = if (keepScreenOn) LightningGold else TextSecondary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+              )
+            }
+          }
+
+          // Reset Progress Button
+          IconButton(
+            onClick = onResetClicked,
+            modifier = Modifier
+              .size(36.dp)
+              .clip(RoundedCornerShape(10.dp))
+              .background(Color(0x33FFFFFF))
+              .testTag("reset_progress_button")
+          ) {
+            Icon(
+              imageVector = Icons.Default.Refresh,
+              contentDescription = "รีเซ็ตความคืบหน้า",
+              tint = TextPrimary,
+              modifier = Modifier.size(18.dp)
+            )
+          }
         }
       }
 
-      Spacer(modifier = Modifier.height(14.dp))
+      Spacer(modifier = Modifier.height(10.dp))
 
-      // Stats Badges Row
+      // Stats Badges Row: 1. Main Quest Progress | 2. 4 Temples | 3. Live Round Counter
       Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
       ) {
         // Step progress pill
         Surface(
-          shape = RoundedCornerShape(12.dp),
+          shape = RoundedCornerShape(10.dp),
           color = Color(0x33231F3A),
           modifier = Modifier
-            .weight(1f)
-            .border(1.dp, Color(0x33B388FF), RoundedCornerShape(12.dp))
+            .weight(1.1f)
+            .border(1.dp, Color(0x33B388FF), RoundedCornerShape(10.dp))
         ) {
           Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
               imageVector = Icons.Default.CheckCircle,
               contentDescription = null,
               tint = SuccessGreen,
-              modifier = Modifier.size(16.dp)
+              modifier = Modifier.size(15.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(5.dp))
             Column {
               Text(
                 text = "ภารกิจหลัก",
                 color = TextSecondary,
-                fontSize = 10.sp
+                fontSize = 9.sp
               )
               Text(
-                text = "$completedStepsCount / $totalStepsCount ขั้น (${(progress * 100).toInt()}%)",
+                text = "$completedStepsCount/$totalStepsCount (${(progress * 100).toInt()}%)",
                 color = TextPrimary,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
               )
             }
@@ -214,35 +256,102 @@ fun HeroBanner(
 
         // 4 Temples Lightning pill
         Surface(
-          shape = RoundedCornerShape(12.dp),
+          shape = RoundedCornerShape(10.dp),
           color = Color(0x33231F3A),
           modifier = Modifier
-            .weight(1f)
-            .border(1.dp, LightningGold.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+            .weight(0.9f)
+            .border(1.dp, LightningGold.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
         ) {
           Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
           ) {
             Icon(
               imageVector = Icons.Default.Bolt,
               contentDescription = null,
               tint = LightningGold,
-              modifier = Modifier.size(18.dp)
+              modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Column {
               Text(
-                text = "สายฟ้า 4 วิหาร",
+                text = "4 วิหาร",
                 color = TextSecondary,
-                fontSize = 10.sp
+                fontSize = 9.sp
               )
               Text(
-                text = "$lightningCount / 4 สำเร็จ",
+                text = "$lightningCount / 4",
                 color = LightningGold,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
               )
+            }
+          }
+        }
+
+        // Live Round Counter Pill with Quick +/-
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = Color(0x33231F3A),
+          modifier = Modifier
+            .weight(1.1f)
+            .border(1.dp, HellfireAmber.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+          ) {
+            Column(modifier = Modifier.padding(start = 2.dp)) {
+              Text(
+                text = "รอบปัจจุบัน",
+                color = TextSecondary,
+                fontSize = 9.sp
+              )
+              Text(
+                text = "ROUND $currentRound",
+                color = HellfireAmber,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Black
+              )
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Box(
+                modifier = Modifier
+                  .size(24.dp)
+                  .clip(RoundedCornerShape(6.dp))
+                  .background(Color(0x33FFFFFF))
+                  .clickable { onDecrementRound() }
+                  .testTag("decrement_round_btn"),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Remove,
+                  contentDescription = "ลดรอบ",
+                  tint = TextPrimary,
+                  modifier = Modifier.size(14.dp)
+                )
+              }
+
+              Spacer(modifier = Modifier.width(4.dp))
+
+              Box(
+                modifier = Modifier
+                  .size(24.dp)
+                  .clip(RoundedCornerShape(6.dp))
+                  .background(Color(0x44FF6D00))
+                  .clickable { onIncrementRound() }
+                  .testTag("increment_round_btn"),
+                contentAlignment = Alignment.Center
+              ) {
+                Icon(
+                  imageVector = Icons.Default.Add,
+                  contentDescription = "เพิ่มรอบ",
+                  tint = HellfireAmber,
+                  modifier = Modifier.size(14.dp)
+                )
+              }
             }
           }
         }
@@ -255,7 +364,7 @@ fun HeroBanner(
         progress = { animatedProgress },
         modifier = Modifier
           .fillMaxWidth()
-          .height(6.dp)
+          .height(5.dp)
           .clip(RoundedCornerShape(3.dp)),
         color = AetherPurple,
         trackColor = Color(0x33FFFFFF)

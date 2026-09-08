@@ -9,13 +9,17 @@ import androidx.room.RoomDatabase
  * Room database instance for Rex Infernus quest tracker.
  */
 @Database(
-  entities = [QuestStepProgressEntity::class],
-  version = 1,
+  entities = [
+    QuestStepProgressEntity::class,
+    GameSessionEntity::class
+  ],
+  version = 2,
   exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
   abstract fun questStepProgressDao(): QuestStepProgressDao
+  abstract fun gameSessionDao(): GameSessionDao
 
   companion object {
     @Volatile

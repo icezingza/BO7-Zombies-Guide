@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
@@ -50,7 +48,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +82,8 @@ fun QuestScreen(
   onStepExpandToggled: (Int) -> Unit,
   modifier: Modifier = Modifier
 ) {
+  val quickTags = listOf("PaP", "Cube", "Blight", "Void Claw", "Nexus", "Rex Infernus")
+
   Column(
     modifier = modifier
       .fillMaxSize()
@@ -96,7 +95,7 @@ fun QuestScreen(
       onValueChange = onSearchQueryChanged,
       modifier = Modifier
         .fillMaxWidth()
-        .padding(horizontal = 16.dp, vertical = 8.dp)
+        .padding(horizontal = 16.dp, vertical = 6.dp)
         .testTag("quest_search_input"),
       placeholder = {
         Text("ค้นหาขั้นตอน, อาวุธ, ปริศนา หรือพื้นที่...", color = TextMuted, fontSize = 14.sp)
@@ -132,9 +131,42 @@ fun QuestScreen(
       )
     )
 
+    // Quick Keyword Tag Row
+    LazyRow(
+      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      modifier = Modifier.fillMaxWidth()
+    ) {
+      items(quickTags) { tag ->
+        val isActive = searchQuery.equals(tag, ignoreCase = true)
+        Surface(
+          shape = RoundedCornerShape(8.dp),
+          color = if (isActive) PackAPunchCyan.copy(alpha = 0.25f) else Color(0x221E1B2E),
+          border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            if (isActive) PackAPunchCyan else Color(0x2280D8FF)
+          ),
+          modifier = Modifier
+            .clickable {
+              if (isActive) onSearchQueryChanged("") else onSearchQueryChanged(tag)
+            }
+        ) {
+          Text(
+            text = "#$tag",
+            color = if (isActive) PackAPunchCyan else TextSecondary,
+            fontSize = 11.sp,
+            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+          )
+        }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(4.dp))
+
     // Category Filter Chips
     LazyRow(
-      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+      contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       modifier = Modifier.fillMaxWidth()
     ) {

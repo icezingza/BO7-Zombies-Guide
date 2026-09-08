@@ -7,6 +7,7 @@ import com.example.data.QuestData
 import com.example.data.QuestStep
 import com.example.data.StepCategory
 import com.example.data.local.AppDatabase
+import com.example.data.local.GameSessionEntity
 import com.example.data.local.QuestProgressRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,8 @@ data class GuideUiState(
   val searchQuery: String = "",
   val expandedStepId: Int? = null,
   val currentCubeStepIndex: Int = 0,
+  val currentRound: Int = 1,
+  val keepScreenOn: Boolean = true,
   val houseSymbols: List<String> = listOf("", "", "", ""),
   val templeLightning: Map<String, Boolean> = mapOf(
     "dravakar" to false,
@@ -34,7 +37,8 @@ data class GuideUiState(
 class ZombiesGuideViewModel(
   application: Application,
   private val repository: QuestProgressRepository = QuestProgressRepository(
-    AppDatabase.getDatabase(application).questStepProgressDao()
+    AppDatabase.getDatabase(application).questStepProgressDao(),
+    AppDatabase.getDatabase(application).gameSessionDao()
   )
 ) : AndroidViewModel(application) {
 
@@ -42,11 +46,65 @@ class ZombiesGuideViewModel(
   val uiState: StateFlow<GuideUiState> = _uiState.asStateFlow()
 
   init {
+    // 1. Observe completed quest steps from Room
     viewModelScope.launch {
       repository.allProgress.collect { progressList ->
         val completedIds = progressList.filter { it.isCompleted }.map { it.stepId }.toSet()
         _uiState.update { it.copy(completedSteps = completedIds) }
       }
+    }
+
+    // 2. Observe game session states (Round, Exfil, Temples, Screen On) from Room
+    viewModelScope.launch {
+      repository.sessionState.collect { session ->
+        if (session != null) {
+          val checkedItems = if (session.checkedLoadoutCsv.isEmpty()) {
+            emptySet()
+          } else {
+            session.checkedLoadoutCsv.split(",").filter { it.isNotEmpty() }.toSet()
+          }
+          _uiState.update {
+            it.copy(
+              currentRound = session.currentRound,
+              keepScreenOn = session.keepScreenOn,
+              houseSymbols = listOf(
+                session.houseSymbol0,
+                session.houseSymbol1,
+                session.houseSymbol2,
+                session.houseSymbol3
+              ),
+              templeLightning = mapOf(
+                "dravakar" to session.lightningDravakar,
+                "nyxara" to session.lightningNyxara,
+                "caltheris" to session.lightningCaltheris,
+                "veytharion" to session.lightningVeytharion
+              ),
+              checkedLoadoutItems = checkedItems
+            )
+          }
+        }
+      }
+    }
+  }
+
+  private fun persistSession() {
+    viewModelScope.launch {
+      val state = _uiState.value
+      val session = GameSessionEntity(
+        id = 1,
+        currentRound = state.currentRound,
+        keepScreenOn = state.keepScreenOn,
+        houseSymbol0 = state.houseSymbols.getOrElse(0) { "" },
+        houseSymbol1 = state.houseSymbols.getOrElse(1) { "" },
+        houseSymbol2 = state.houseSymbols.getOrElse(2) { "" },
+        houseSymbol3 = state.houseSymbols.getOrElse(3) { "" },
+        lightningDravakar = state.templeLightning["dravakar"] ?: false,
+        lightningNyxara = state.templeLightning["nyxara"] ?: false,
+        lightningCaltheris = state.templeLightning["caltheris"] ?: false,
+        lightningVeytharion = state.templeLightning["veytharion"] ?: false,
+        checkedLoadoutCsv = state.checkedLoadoutItems.joinToString(",")
+      )
+      repository.saveSession(session)
     }
   }
 
@@ -60,6 +118,21 @@ class ZombiesGuideViewModel(
 
   fun setSearchQuery(query: String) {
     _uiState.update { it.copy(searchQuery = query) }
+  }
+
+  fun toggleKeepScreenOn() {
+    _uiState.update { it.copy(keepScreenOn = !it.keepScreenOn) }
+    persistSession()
+  }
+
+  fun incrementRound() {
+    _uiState.update { it.copy(currentRound = (it.currentRound + 1).coerceAtMost(999)) }
+    persistSession()
+  }
+
+  fun decrementRound() {
+    _uiState.update { it.copy(currentRound = (it.currentRound - 1).coerceAtLeast(1)) }
+    persistSession()
   }
 
   fun toggleStepCompletion(stepId: Int) {
@@ -102,6 +175,7 @@ class ZombiesGuideViewModel(
       }
       state.copy(houseSymbols = updated)
     }
+    persistSession()
   }
 
   fun toggleTempleLightning(templeId: String) {
@@ -111,6 +185,7 @@ class ZombiesGuideViewModel(
       updated[templeId] = !currentVal
       state.copy(templeLightning = updated)
     }
+    persistSession()
   }
 
   fun toggleLoadoutItem(itemId: String) {
@@ -122,6 +197,7 @@ class ZombiesGuideViewModel(
       }
       state.copy(checkedLoadoutItems = newItems)
     }
+    persistSession()
   }
 
   fun resetAllProgress() {
@@ -132,6 +208,7 @@ class ZombiesGuideViewModel(
       it.copy(
         completedSteps = emptySet(),
         currentCubeStepIndex = 0,
+        currentRound = 1,
         houseSymbols = listOf("", "", "", ""),
         templeLightning = mapOf(
           "dravakar" to false,

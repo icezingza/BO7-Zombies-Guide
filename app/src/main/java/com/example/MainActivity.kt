@@ -1,6 +1,7 @@
 package com.example
 
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -14,10 +15,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -28,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +45,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.QuestData
 import com.example.ui.components.HeroBanner
 import com.example.ui.screens.BossAndLoadoutScreen
+import com.example.ui.screens.CameraScreen
 import com.example.ui.screens.PuzzleSolverScreen
 import com.example.ui.screens.QuestScreen
 import com.example.ui.screens.QuickAssistScreen
@@ -50,6 +54,7 @@ import com.example.ui.theme.DangerRed
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DarkSurfaceCard
+import com.example.ui.theme.LightningGold
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.PackAPunchCyan
 import com.example.ui.theme.TextMuted
@@ -70,6 +75,15 @@ class MainActivity : ComponentActivity() {
         val uiState by viewModel.uiState.collectAsState()
         var showResetDialog by remember { mutableStateOf(false) }
 
+        // Keep Screen On Effect: dynamically sync with user's toggle setting
+        LaunchedEffect(uiState.keepScreenOn) {
+          if (uiState.keepScreenOn) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+          } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+          }
+        }
+
         Scaffold(
           modifier = Modifier
             .fillMaxSize()
@@ -85,7 +99,7 @@ class MainActivity : ComponentActivity() {
               NavigationBarItem(
                 selected = uiState.activeTab == 0,
                 onClick = { viewModel.setActiveTab(0) },
-                icon = { Icon(Icons.Default.Assignment, contentDescription = "เควสหลัก") },
+                icon = { Icon(Icons.AutoMirrored.Filled.Assignment, contentDescription = "เควสหลัก") },
                 label = { Text("เควสหลัก", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
                 colors = NavigationBarItemDefaults.colors(
                   selectedIconColor = DarkBackground,
@@ -141,6 +155,21 @@ class MainActivity : ComponentActivity() {
                 ),
                 modifier = Modifier.testTag("nav_item_boss")
               )
+
+              NavigationBarItem(
+                selected = uiState.activeTab == 4,
+                onClick = { viewModel.setActiveTab(4) },
+                icon = { Icon(Icons.Default.Videocam, contentDescription = "กล้อง AI") },
+                label = { Text("กล้อง AI", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                colors = NavigationBarItemDefaults.colors(
+                  selectedIconColor = DarkBackground,
+                  selectedTextColor = LightningGold,
+                  indicatorColor = LightningGold,
+                  unselectedIconColor = TextMuted,
+                  unselectedTextColor = TextMuted
+                ),
+                modifier = Modifier.testTag("nav_item_camera")
+              )
             }
           }
         ) { innerPadding ->
@@ -150,11 +179,16 @@ class MainActivity : ComponentActivity() {
               .padding(innerPadding)
               .statusBarsPadding()
           ) {
-            // Header Hero Banner with live quest progress
+            // Header Hero Banner with live quest progress, round counter, and keep-screen-on toggle
             HeroBanner(
               completedStepsCount = uiState.completedSteps.size,
               totalStepsCount = QuestData.steps.size,
               lightningCount = uiState.templeLightning.values.count { it },
+              currentRound = uiState.currentRound,
+              keepScreenOn = uiState.keepScreenOn,
+              onIncrementRound = { viewModel.incrementRound() },
+              onDecrementRound = { viewModel.decrementRound() },
+              onToggleKeepScreenOn = { viewModel.toggleKeepScreenOn() },
               onResetClicked = { showResetDialog = true }
             )
 
@@ -187,6 +221,11 @@ class MainActivity : ComponentActivity() {
                   checkedItems = uiState.checkedLoadoutItems,
                   onToggleItem = { viewModel.toggleLoadoutItem(it) }
                 )
+                4 -> CameraScreen(
+                  onApplySymbolDetected = { slotIndex, symbolName ->
+                    viewModel.updateHouseSymbol(slotIndex, symbolName)
+                  }
+                )
               }
             }
           }
@@ -205,7 +244,7 @@ class MainActivity : ComponentActivity() {
               },
               text = {
                 Text(
-                  text = "ระบบจะล้างเครื่องหมายขั้นตอนที่ทำสำเร็จ สัญลักษณ์บ้าน และสถานะสายฟ้าวิหาร เพื่อเริ่มรอบใหม่ (New Game)",
+                  text = "ระบบจะล้างเครื่องหมายขั้นตอนที่ทำสำเร็จ, สัญลักษณ์บ้าน, สถานะสายฟ้าวิหาร และตัวนับรอบกลับเป็น 1 เพื่อเริ่มรอบใหม่",
                   color = TextSecondary,
                   fontSize = 13.sp
                 )

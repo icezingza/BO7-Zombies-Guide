@@ -1,6 +1,8 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import com.example.ui.components.Cube3DVisualizer
+import com.example.ui.components.Ps5LensScanner
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -304,7 +307,12 @@ fun VeytharionCubeTab(
             fontSize = 11.sp
           )
 
-          Spacer(modifier = Modifier.height(20.dp))
+          Spacer(modifier = Modifier.height(14.dp))
+
+          // 3D Schematic Cube Visualizer
+          Cube3DVisualizer(currentStep = currentStep)
+
+          Spacer(modifier = Modifier.height(16.dp))
 
           // Next / Prev Buttons
           Row(
@@ -433,12 +441,109 @@ fun HouseSymbolsTab(
     "มงกุฎ (Crown)", "ดวงตา (Eye)"
   )
   var activeSlotIndex by remember { mutableIntStateOf(0) }
+  var showCameraLens by remember { mutableStateOf(false) }
+
+  if (showCameraLens) {
+    androidx.compose.ui.window.Dialog(
+      onDismissRequest = { showCameraLens = false },
+      properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        Ps5LensScanner(
+          currentHouseSymbols = symbols,
+          onSymbolDetected = { slot, detectedName ->
+            onUpdateSymbol(slot, detectedName)
+          },
+          onClose = { showCameraLens = false }
+        )
+      }
+    }
+  }
 
   LazyColumn(
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
     modifier = Modifier.fillMaxSize()
   ) {
+    // PS5 Lens Scan Launcher Card
+    item {
+      Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0x331F2A4A)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, PackAPunchCyan),
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable { showCameraLens = true }
+          .testTag("launch_ps5_lens_banner")
+      ) {
+        Row(
+          modifier = Modifier.padding(14.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Surface(
+            shape = CircleShape,
+            color = PackAPunchCyan.copy(alpha = 0.2f),
+            modifier = Modifier.size(44.dp)
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = null,
+                tint = PackAPunchCyan,
+                modifier = Modifier.size(24.dp)
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.width(12.dp))
+
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = "PS5 Lens: สแกนจอทีวีสด",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = LightningGold.copy(alpha = 0.2f)
+              ) {
+                Text(
+                  text = "ใหม่",
+                  color = LightningGold,
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Black,
+                  modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+              }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = "เปิดกล้องส่องจอทีวี PS5 เพื่ออ่านสัญลักษณ์ 4 เสาอัตโนมัติ ไม่ต้องกดจำเอง",
+              color = TextSecondary,
+              fontSize = 11.sp,
+              lineHeight = 15.sp
+            )
+          }
+
+          Spacer(modifier = Modifier.width(6.dp))
+
+          Button(
+            onClick = { showCameraLens = true },
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+              containerColor = PackAPunchCyan,
+              contentColor = DarkBackground
+            ),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+          ) {
+            Text("เปิดสแกน", fontSize = 11.sp, fontWeight = FontWeight.Black)
+          }
+        }
+      }
+    }
     item {
       Surface(
         shape = RoundedCornerShape(12.dp),
