@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.QuestData
+import com.example.network.AudioCoPilot
 import com.example.ui.components.HeroBanner
 import com.example.ui.screens.BossAndLoadoutScreen
 import com.example.ui.screens.CameraScreen
@@ -73,6 +74,8 @@ class MainActivity : ComponentActivity() {
     setContent {
       MyApplicationTheme {
         val uiState by viewModel.uiState.collectAsState()
+        val raidHistoryList by viewModel.raidHistoryList.collectAsState()
+        val audioCoPilot = remember { AudioCoPilot(applicationContext) }
         var showResetDialog by remember { mutableStateOf(false) }
 
         // Keep Screen On Effect: dynamically sync with user's toggle setting
@@ -206,22 +209,42 @@ class MainActivity : ComponentActivity() {
                   onStepToggled = { viewModel.toggleStepCompletion(it) },
                   onStepExpandToggled = { viewModel.toggleStepExpand(it) }
                 )
-                1 -> QuickAssistScreen()
+                1 -> QuickAssistScreen(
+                  currentRound = uiState.currentRound,
+                  completedStepsCount = uiState.completedSteps.size,
+                  totalStepsCount = QuestData.steps.size,
+                  cleansedTemplesCount = uiState.templeLightning.values.count { it },
+                  raidHistoryList = raidHistoryList,
+                  onRecordCurrentRun = { isExfilSuccess, notes ->
+                    viewModel.recordCurrentRaidRun(isExfilSuccess, notes)
+                  },
+                  onDeleteRaidRecord = { id ->
+                    viewModel.deleteRaidRecord(id)
+                  }
+                )
                 2 -> PuzzleSolverScreen(
                   currentCubeStep = uiState.currentCubeStepIndex,
                   houseSymbols = uiState.houseSymbols,
                   templeLightning = uiState.templeLightning,
+                  currentRound = uiState.currentRound,
                   onNextCubeStep = { viewModel.nextCubeStep() },
                   onPrevCubeStep = { viewModel.prevCubeStep() },
                   onResetCube = { viewModel.resetCubeSteps() },
+                  onSetCubeStep = { viewModel.setCubeStep(it) },
                   onUpdateHouseSymbol = { index, symbol -> viewModel.updateHouseSymbol(index, symbol) },
                   onToggleLightning = { viewModel.toggleTempleLightning(it) }
                 )
                 3 -> BossAndLoadoutScreen(
                   checkedItems = uiState.checkedLoadoutItems,
-                  onToggleItem = { viewModel.toggleLoadoutItem(it) }
+                  onToggleItem = { viewModel.toggleLoadoutItem(it) },
+                  currentRound = uiState.currentRound,
+                  onIncrementRound = { viewModel.incrementRound() },
+                  onDecrementRound = { viewModel.decrementRound() },
+                  onSpeakWarning = { text -> audioCoPilot.speakTacticalAdvice(text, force = true) }
                 )
                 4 -> CameraScreen(
+                  houseSymbols = uiState.houseSymbols,
+                  currentRound = uiState.currentRound,
                   onApplySymbolDetected = { slotIndex, symbolName ->
                     viewModel.updateHouseSymbol(slotIndex, symbolName)
                   }

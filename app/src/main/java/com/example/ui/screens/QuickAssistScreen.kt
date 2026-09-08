@@ -71,11 +71,21 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WarningAmber
 
+import com.example.data.local.RaidHistoryEntity
+import com.example.ui.components.RaidHistoryDashboard
+
 @Composable
 fun QuickAssistScreen(
+  currentRound: Int = 1,
+  completedStepsCount: Int = 0,
+  totalStepsCount: Int = 14,
+  cleansedTemplesCount: Int = 0,
+  raidHistoryList: List<RaidHistoryEntity> = emptyList(),
+  onRecordCurrentRun: (Boolean, String) -> Unit = { _, _ -> },
+  onDeleteRaidRecord: (Long) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
-  var selectedSubTab by remember { mutableIntStateOf(0) } // 0: ถามระหว่างเล่น, 1: สูตรเหลือบเดียว
+  var selectedSubTab by remember { mutableIntStateOf(0) } // 0: ถามระหว่างเล่น, 1: สูตรเหลือบเดียว, 2: ประวัติเรด & แดชบอร์ด
   var selectedLocationId by remember { mutableStateOf(QuestData.quickLocations.first().id) }
 
   Column(
@@ -101,8 +111,8 @@ fun QuickAssistScreen(
         onClick = { selectedSubTab = 0 },
         text = {
           Text(
-            "ถามระหว่างเล่น (Live Assist)",
-            fontSize = 13.sp,
+            "Live Assist",
+            fontSize = 12.sp,
             fontWeight = if (selectedSubTab == 0) FontWeight.Bold else FontWeight.Normal
           )
         },
@@ -113,23 +123,47 @@ fun QuickAssistScreen(
         onClick = { selectedSubTab = 1 },
         text = {
           Text(
-            "สูตรเหลือบเดียว (Speed Run)",
-            fontSize = 13.sp,
+            "Speed Run",
+            fontSize = 12.sp,
             fontWeight = if (selectedSubTab == 1) FontWeight.Bold else FontWeight.Normal
           )
         },
         modifier = Modifier.testTag("subtab_speed_flow")
       )
+      Tab(
+        selected = selectedSubTab == 2,
+        onClick = { selectedSubTab = 2 },
+        text = {
+          Text(
+            "ประวัติเรด (${raidHistoryList.size})",
+            fontSize = 12.sp,
+            fontWeight = if (selectedSubTab == 2) FontWeight.Bold else FontWeight.Normal
+          )
+        },
+        modifier = Modifier.testTag("subtab_raid_history")
+      )
     }
 
-    if (selectedSubTab == 0) {
-      LiveAssistContent(
+    when (selectedSubTab) {
+      0 -> LiveAssistContent(
         locations = QuestData.quickLocations,
         selectedLocationId = selectedLocationId,
         onLocationSelected = { selectedLocationId = it }
       )
-    } else {
-      SpeedFlowContent()
+      1 -> SpeedFlowContent()
+      2 -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item {
+          RaidHistoryDashboard(
+            historyList = raidHistoryList,
+            currentRound = currentRound,
+            completedStepsCount = completedStepsCount,
+            totalStepsCount = totalStepsCount,
+            cleansedTemplesCount = cleansedTemplesCount,
+            onRecordCurrentRun = onRecordCurrentRun,
+            onDeleteRecord = onDeleteRaidRecord
+          )
+        }
+      }
     }
   }
 }

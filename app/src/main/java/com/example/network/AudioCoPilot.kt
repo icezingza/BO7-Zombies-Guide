@@ -25,7 +25,7 @@ class AudioCoPilot(context: Context) {
   init {
     tts = TextToSpeech(context.applicationContext) { status ->
       if (status == TextToSpeech.SUCCESS) {
-        val thaiLocale = Locale("th", "TH")
+        val thaiLocale = Locale.forLanguageTag("th-TH")
         val result = tts?.setLanguage(thaiLocale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
           Log.w(TAG, "Thai language is not supported for TTS, falling back to default locale.")

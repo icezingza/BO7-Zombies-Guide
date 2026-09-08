@@ -80,14 +80,20 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WarningAmber
 
+import androidx.compose.material.icons.filled.QrCode
+import androidx.compose.material.icons.filled.Share
+import com.example.ui.components.SquadShareDialog
+
 @Composable
 fun PuzzleSolverScreen(
   currentCubeStep: Int,
   houseSymbols: List<String>,
   templeLightning: Map<String, Boolean>,
+  currentRound: Int = 1,
   onNextCubeStep: () -> Unit,
   onPrevCubeStep: () -> Unit,
   onResetCube: () -> Unit,
+  onSetCubeStep: (Int) -> Unit = {},
   onUpdateHouseSymbol: (Int, String) -> Unit,
   onToggleLightning: (String) -> Unit,
   modifier: Modifier = Modifier
@@ -154,10 +160,14 @@ fun PuzzleSolverScreen(
         currentStep = currentCubeStep,
         onNext = onNextCubeStep,
         onPrev = onPrevCubeStep,
-        onReset = onResetCube
+        onReset = onResetCube,
+        onSetStep = onSetCubeStep
       )
       1 -> HouseSymbolsTab(
         symbols = houseSymbols,
+        currentRound = currentRound,
+        currentCubeStep = currentCubeStep,
+        templeLightning = templeLightning,
         onUpdateSymbol = onUpdateHouseSymbol
       )
       2 -> TemplesCleansingTab(
@@ -173,7 +183,8 @@ fun VeytharionCubeTab(
   currentStep: Int,
   onNext: () -> Unit,
   onPrev: () -> Unit,
-  onReset: () -> Unit
+  onReset: () -> Unit,
+  onSetStep: (Int) -> Unit = {}
 ) {
   val moves = QuestData.cubeMoves
   val activeMove = moves.getOrElse(currentStep) { moves.first() }
@@ -310,7 +321,10 @@ fun VeytharionCubeTab(
           Spacer(modifier = Modifier.height(14.dp))
 
           // 3D Schematic Cube Visualizer
-          Cube3DVisualizer(currentStep = currentStep)
+          Cube3DVisualizer(
+            currentStep = currentStep,
+            onSelectStep = onSetStep
+          )
 
           Spacer(modifier = Modifier.height(16.dp))
 
@@ -433,6 +447,9 @@ fun VeytharionCubeTab(
 @Composable
 fun HouseSymbolsTab(
   symbols: List<String>,
+  currentRound: Int = 1,
+  currentCubeStep: Int = 0,
+  templeLightning: Map<String, Boolean> = emptyMap(),
   onUpdateSymbol: (Int, String) -> Unit
 ) {
   val presetSymbols = listOf(
@@ -442,6 +459,17 @@ fun HouseSymbolsTab(
   )
   var activeSlotIndex by remember { mutableIntStateOf(0) }
   var showCameraLens by remember { mutableStateOf(false) }
+  var showSquadShareDialog by remember { mutableStateOf(false) }
+
+  if (showSquadShareDialog) {
+    SquadShareDialog(
+      houseSymbols = symbols,
+      currentRound = currentRound,
+      currentCubeStep = currentCubeStep,
+      templeLightning = templeLightning,
+      onDismiss = { showSquadShareDialog = false }
+    )
+  }
 
   if (showCameraLens) {
     androidx.compose.ui.window.Dialog(
@@ -465,6 +493,87 @@ fun HouseSymbolsTab(
     verticalArrangement = Arrangement.spacedBy(14.dp),
     modifier = Modifier.fillMaxSize()
   ) {
+    // Squad Share & QR Code Card
+    item {
+      Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0x2A1F1838)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LightningGold.copy(alpha = 0.5f)),
+        modifier = Modifier
+          .fillMaxWidth()
+          .clickable { showSquadShareDialog = true }
+          .testTag("squad_share_banner")
+      ) {
+        Row(
+          modifier = Modifier.padding(14.dp),
+          verticalAlignment = Alignment.CenterVertically
+        ) {
+          Surface(
+            shape = CircleShape,
+            color = LightningGold.copy(alpha = 0.2f),
+            modifier = Modifier.size(44.dp)
+          ) {
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = Icons.Default.QrCode,
+                contentDescription = null,
+                tint = LightningGold,
+                modifier = Modifier.size(24.dp)
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.width(12.dp))
+
+          Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = "แชร์สัญลักษณ์ให้เพื่อนในทีม (Squad Share)",
+                color = TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = LightningGold.copy(alpha = 0.2f)
+              ) {
+                Text(
+                  text = "QR CODE",
+                  color = LightningGold,
+                  fontSize = 9.sp,
+                  fontWeight = FontWeight.Black,
+                  modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                )
+              }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+              text = "สร้าง QR และข้อความสรุปรหัส 4 เสา + รอบปัจจุบัน ส่งเข้าไลน์/ดิสคอร์ดหรือให้เพื่อนสแกนจอทันที",
+              color = TextSecondary,
+              fontSize = 11.sp,
+              lineHeight = 15.sp
+            )
+          }
+
+          Spacer(modifier = Modifier.width(6.dp))
+
+          Button(
+            onClick = { showSquadShareDialog = true },
+            shape = RoundedCornerShape(10.dp),
+            colors = ButtonDefaults.buttonColors(
+              containerColor = LightningGold,
+              contentColor = DarkBackground
+            ),
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+          ) {
+            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text("แชร์ตี้", fontSize = 11.sp, fontWeight = FontWeight.Black)
+          }
+        }
+      }
+    }
     // PS5 Lens Scan Launcher Card
     item {
       Card(

@@ -15,6 +15,7 @@ sealed class VoiceAction {
   object ResumeLoop : VoiceAction()
   object NextStep : VoiceAction()
   object SaveSymbol : VoiceAction()
+  object RequestBossTips : VoiceAction()
   data class Unrecognized(val text: String) : VoiceAction()
 }
 
@@ -106,6 +107,9 @@ class VoiceCommandHandler(
       }
       clean.contains("จด") || clean.contains("บันทึก") || clean.contains("เซฟ") || clean.contains("save") -> {
         onActionDetected(VoiceAction.SaveSymbol)
+      }
+      clean.contains("บอส") || clean.contains("boss") || clean.contains("สูตรบอส") || clean.contains("ขอสูตรบอส") -> {
+        onActionDetected(VoiceAction.RequestBossTips)
       }
       clean.isNotEmpty() -> {
         onActionDetected(VoiceAction.Unrecognized(clean))

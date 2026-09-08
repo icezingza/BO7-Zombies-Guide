@@ -67,10 +67,16 @@ import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 import com.example.ui.theme.WarningAmber
 
+import com.example.ui.components.TacticalTimerCard
+
 @Composable
 fun BossAndLoadoutScreen(
   checkedItems: Set<String>,
   onToggleItem: (String) -> Unit,
+  currentRound: Int = 1,
+  onIncrementRound: () -> Unit = {},
+  onDecrementRound: () -> Unit = {},
+  onSpeakWarning: (String) -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   var selectedTab by remember { mutableIntStateOf(0) } // 0: กลยุทธ์บอส Warden, 1: เช็กลิสต์ความพร้อม
@@ -97,7 +103,7 @@ fun BossAndLoadoutScreen(
         onClick = { selectedTab = 0 },
         text = {
           Text(
-            "กลยุทธ์บอส Warden",
+            "กลยุทธ์บอส & จับเวลา",
             fontSize = 13.sp,
             fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
           )
@@ -119,7 +125,12 @@ fun BossAndLoadoutScreen(
     }
 
     if (selectedTab == 0) {
-      WardenBossGuideTab()
+      WardenBossGuideTab(
+        currentRound = currentRound,
+        onIncrementRound = onIncrementRound,
+        onDecrementRound = onDecrementRound,
+        onSpeakWarning = onSpeakWarning
+      )
     } else {
       LoadoutChecklistTab(
         checkedItems = checkedItems,
@@ -130,12 +141,27 @@ fun BossAndLoadoutScreen(
 }
 
 @Composable
-fun WardenBossGuideTab() {
+fun WardenBossGuideTab(
+  currentRound: Int = 1,
+  onIncrementRound: () -> Unit = {},
+  onDecrementRound: () -> Unit = {},
+  onSpeakWarning: (String) -> Unit = {}
+) {
   LazyColumn(
     contentPadding = PaddingValues(16.dp),
     verticalArrangement = Arrangement.spacedBy(14.dp),
     modifier = Modifier.fillMaxSize()
   ) {
+    // Tactical Boss & Event Timer Card
+    item {
+      TacticalTimerCard(
+        currentRound = currentRound,
+        onIncrementRound = onIncrementRound,
+        onDecrementRound = onDecrementRound,
+        onSpeakWarning = onSpeakWarning
+      )
+    }
+
     // Weapon Allocation Card
     item {
       Card(

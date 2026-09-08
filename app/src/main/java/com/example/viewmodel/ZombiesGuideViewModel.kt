@@ -9,9 +9,12 @@ import com.example.data.StepCategory
 import com.example.data.local.AppDatabase
 import com.example.data.local.GameSessionEntity
 import com.example.data.local.QuestProgressRepository
+import com.example.data.local.RaidHistoryEntity
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -34,16 +37,20 @@ data class GuideUiState(
   val activeTab: Int = 0 // 0: Main Quest, 1: Quick Assist, 2: Puzzle Solver, 3: Boss & Gear
 )
 
-class ZombiesGuideViewModel(
+class ZombiesGuideViewModel @JvmOverloads constructor(
   application: Application,
   private val repository: QuestProgressRepository = QuestProgressRepository(
     AppDatabase.getDatabase(application).questStepProgressDao(),
-    AppDatabase.getDatabase(application).gameSessionDao()
+    AppDatabase.getDatabase(application).gameSessionDao(),
+    AppDatabase.getDatabase(application).raidHistoryDao()
   )
 ) : AndroidViewModel(application) {
 
   private val _uiState = MutableStateFlow(GuideUiState())
   val uiState: StateFlow<GuideUiState> = _uiState.asStateFlow()
+
+  val raidHistoryList: StateFlow<List<RaidHistoryEntity>> = repository.allRaidHistory
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
   init {
     // 1. Observe completed quest steps from Room
@@ -167,6 +174,13 @@ class ZombiesGuideViewModel(
     _uiState.update { it.copy(currentCubeStepIndex = 0) }
   }
 
+  fun setCubeStep(step: Int) {
+    _uiState.update { state ->
+      val clamped = step.coerceIn(0, QuestData.cubeMoves.size - 1)
+      state.copy(currentCubeStepIndex = clamped)
+    }
+  }
+
   fun updateHouseSymbol(index: Int, symbol: String) {
     _uiState.update { state ->
       val updated = state.houseSymbols.toMutableList()
@@ -218,6 +232,26 @@ class ZombiesGuideViewModel(
         ),
         checkedLoadoutItems = emptySet()
       )
+    }
+  }
+
+  fun recordCurrentRaidRun(isExfilSuccess: Boolean, notes: String = "") {
+    val state = _uiState.value
+    val cleansedTemplesCount = state.templeLightning.values.count { it }
+    viewModelScope.launch {
+      repository.recordRaidSession(
+        roundReached = state.currentRound,
+        stepsCompletedCount = state.completedSteps.size,
+        templesCleansedCount = cleansedTemplesCount,
+        isExfilSuccess = isExfilSuccess,
+        notes = notes
+      )
+    }
+  }
+
+  fun deleteRaidRecord(id: Long) {
+    viewModelScope.launch {
+      repository.deleteRaid(id)
     }
   }
 

@@ -16,6 +16,13 @@ class ExampleRobolectricTest {
   fun `read string from context`() {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val appName = context.getString(R.string.app_name)
-    assertEquals("BO7 Zombies", appName)
+    assertEquals("BO7 Zombies Guide", appName)
+  }
+
+  @Test
+  fun `viewmodel can be instantiated with application`() {
+    val application = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val viewModel = com.example.viewmodel.ZombiesGuideViewModel(application)
+    org.junit.Assert.assertNotNull(viewModel.uiState.value)
   }
 }

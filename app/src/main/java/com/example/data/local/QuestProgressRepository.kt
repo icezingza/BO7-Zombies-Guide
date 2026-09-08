@@ -8,12 +8,38 @@ import kotlinx.coroutines.flow.Flow
  */
 class QuestProgressRepository(
   private val questDao: QuestStepProgressDao,
-  private val sessionDao: GameSessionDao
+  private val sessionDao: GameSessionDao,
+  private val raidDao: RaidHistoryDao? = null
 ) {
 
   val allProgress: Flow<List<QuestStepProgressEntity>> = questDao.getAllProgress()
   val completedProgress: Flow<List<QuestStepProgressEntity>> = questDao.getCompletedProgress()
   val sessionState: Flow<GameSessionEntity?> = sessionDao.getSession()
+  val allRaidHistory: Flow<List<RaidHistoryEntity>> = raidDao?.getAllRaidHistory() ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+  suspend fun recordRaidSession(
+    roundReached: Int,
+    stepsCompletedCount: Int,
+    templesCleansedCount: Int,
+    isExfilSuccess: Boolean,
+    durationMinutes: Int = 0,
+    notes: String = ""
+  ) {
+    raidDao?.insertRaidHistory(
+      RaidHistoryEntity(
+        roundReached = roundReached,
+        stepsCompletedCount = stepsCompletedCount,
+        templesCleansedCount = templesCleansedCount,
+        isExfilSuccess = isExfilSuccess,
+        durationMinutes = durationMinutes,
+        notes = notes
+      )
+    )
+  }
+
+  suspend fun deleteRaid(id: Long) {
+    raidDao?.deleteRaidHistory(id)
+  }
 
   suspend fun getProgressForStep(stepId: Int): QuestStepProgressEntity? {
     return questDao.getProgressByStepId(stepId)

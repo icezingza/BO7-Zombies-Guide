@@ -39,18 +39,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,7 +74,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -91,9 +101,19 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.network.AiConfig
+import com.example.network.AiConfigManager
+import com.example.network.AudioCoPilot
+import com.example.network.FrameDifferenceDetector
 import com.example.network.GeminiGameplayAnalyzer
 import com.example.network.GameplayAnalysisResult
 import com.example.network.ThreatLevel
+import com.example.network.VoiceAction
+import com.example.network.VoiceCommandHandler
+import androidx.compose.material.icons.filled.PictureInPicture
+import com.example.ui.components.AetherCubeCalculatorDialog
+import com.example.ui.components.AiSettingsDialog
+import com.example.ui.components.FloatingHudWidget
 import com.example.ui.theme.AetherPurple
 import com.example.ui.theme.DangerRed
 import com.example.ui.theme.DarkBackground
@@ -119,12 +139,24 @@ import java.util.concurrent.Executors
  */
 @Composable
 fun CameraScreen(
+  houseSymbols: List<String> = listOf("", "", "", ""),
+  currentRound: Int = 1,
   onApplySymbolDetected: (slotIndex: Int, symbolName: String) -> Unit = { _, _ -> },
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   val lifecycleOwner = LocalLifecycleOwner.current
   val coroutineScope = rememberCoroutineScope()
+
+  // AI Configuration State (Persistent Preferences)
+  val configManager = remember { AiConfigManager(context) }
+  val aiConfig by configManager.configState.collectAsState()
+  var showSettingsDialog by remember { mutableStateOf(false) }
+  var showCubeDialog by remember { mutableStateOf(false) }
+  var showFloatingHud by remember { mutableStateOf(false) }
+
+  // Audio Co-Pilot (Text-to-Speech)
+  val audioCoPilot = remember { AudioCoPilot(context) }
 
   // Camera permissions
   var hasCameraPermission by remember {
@@ -137,6 +169,19 @@ fun CameraScreen(
     ActivityResultContracts.RequestPermission()
   ) { isGranted ->
     hasCameraPermission = isGranted
+  }
+
+  // Audio Record permission for Voice Commands
+  var hasAudioPermission by remember {
+    mutableStateOf(
+      ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    )
+  }
+
+  val audioPermissionLauncher = rememberLauncherForActivityResult(
+    ActivityResultContracts.RequestPermission()
+  ) { isGranted ->
+    hasAudioPermission = isGranted
   }
 
   // Camera Controls State
@@ -153,10 +198,93 @@ fun CameraScreen(
   var isAnalyzing by remember { mutableStateOf(false) }
   var analyzedFramesCount by remember { mutableIntStateOf(0) }
 
+  // Smart Frame Difference Detection Filter State
+  var lastAnalyzedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+  var skippedFramesCount by remember { mutableIntStateOf(0) }
+  var currentMotionDiff by remember { mutableFloatStateOf(0.0f) }
+  var isScreenStatic by remember { mutableStateOf(false) }
+
   // Analysis Results
   val analyzer = remember { GeminiGameplayAnalyzer() }
   var latestResult by remember { mutableStateOf<GameplayAnalysisResult?>(null) }
   val history = remember { mutableStateListOf<GameplayAnalysisResult>() }
+
+  // Hands-Free Voice Command System
+  var lastVoiceCommandName by remember { mutableStateOf<String?>(null) }
+  val voiceCommandHandler = remember {
+    VoiceCommandHandler(context) { action ->
+      when (action) {
+        is VoiceAction.TriggerScan -> {
+          lastVoiceCommandName = "สแกนทันที"
+          audioCoPilot.speakTacticalAdvice("กำลังสแกนจอภาพ", force = true)
+          val currentBitmap = latestFrameBitmap
+          if (currentBitmap != null && !isAnalyzing) {
+            isAnalyzing = true
+            coroutineScope.launch(Dispatchers.IO) {
+              val result = analyzer.analyzeFrame(currentBitmap, config = aiConfig)
+              latestResult = result
+              analyzedFramesCount++
+              if (history.size >= 8) history.removeLast()
+              history.add(0, result)
+              isAnalyzing = false
+
+              if (aiConfig.isTtsEnabled && result.tacticalAdvice.isNotBlank()) {
+                val isCrit = result.threatLevel == ThreatLevel.CRITICAL
+                audioCoPilot.speakTacticalAdvice(
+                  text = if (isCrit) "ภัยวิกฤต! ${result.tacticalAdvice}" else result.tacticalAdvice,
+                  isCritical = isCrit
+                )
+              }
+            }
+          }
+        }
+        is VoiceAction.PauseLoop -> {
+          lastVoiceCommandName = "หยุดลูปสด"
+          isLiveAnalysisActive = false
+          audioCoPilot.speakTacticalAdvice("หยุดลูปสดแล้ว", force = true)
+        }
+        is VoiceAction.ResumeLoop -> {
+          lastVoiceCommandName = "เริ่มลูปสด"
+          isLiveAnalysisActive = true
+          audioCoPilot.speakTacticalAdvice("เริ่มลูปวิเคราะห์สด", force = true)
+        }
+        is VoiceAction.SaveSymbol -> {
+          lastVoiceCommandName = "บันทึกสัญลักษณ์"
+          val puzzle = latestResult?.detectedPuzzles?.firstOrNull()
+          if (puzzle != null) {
+            onApplySymbolDetected(0, puzzle)
+            audioCoPilot.speakTacticalAdvice("บันทึกสัญลักษณ์ $puzzle เรียบร้อย", force = true)
+          } else {
+            audioCoPilot.speakTacticalAdvice("ไม่พบสัญลักษณ์ในจอนี้", force = true)
+          }
+        }
+        is VoiceAction.RequestBossTips -> {
+          lastVoiceCommandName = "ขอสูตรบอส"
+          audioCoPilot.speakTacticalAdvice("สูตรบอส เล็งยิงคริสตัลที่หน้าอก และระวังระเบิด Void Burst รีบหลบหลังเสา", force = true)
+        }
+        is VoiceAction.NextStep -> {
+          lastVoiceCommandName = "ขั้นตอนถัดไป"
+          audioCoPilot.speakTacticalAdvice("รับทราบ ไปขั้นตอนถัดไป", force = true)
+        }
+        is VoiceAction.Unrecognized -> {
+          lastVoiceCommandName = "คำสั่ง: ${action.text}"
+        }
+      }
+    }
+  }
+
+  // Manage Voice Command listening lifecycle
+  LaunchedEffect(aiConfig.isVoiceCommandEnabled, hasAudioPermission) {
+    if (aiConfig.isVoiceCommandEnabled) {
+      if (hasAudioPermission) {
+        voiceCommandHandler.startListening()
+      } else {
+        audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+      }
+    } else {
+      voiceCommandHandler.stopListening()
+    }
+  }
 
   // Pulsing animation for active live scan
   val infiniteTransition = rememberInfiniteTransition(label = "pulse")
@@ -177,42 +305,79 @@ fun CameraScreen(
     }
   }
 
-  // Camera Executor for background image analysis
+  // Camera Executor for background image analysis and cleanup
   val cameraExecutor = remember { Executors.newSingleThreadExecutor() }
   DisposableEffect(Unit) {
     onDispose {
       cameraExecutor.shutdown()
+      audioCoPilot.shutdown()
+      voiceCommandHandler.stopListening()
     }
   }
 
-  // Continuous Video Frame Processing Loop
-  LaunchedEffect(isLiveAnalysisActive, analysisIntervalMs, hasCameraPermission) {
+  // Continuous Video Frame Processing Loop with Smart Motion Filter & Audio Co-Pilot
+  LaunchedEffect(isLiveAnalysisActive, analysisIntervalMs, hasCameraPermission, aiConfig) {
     if (!hasCameraPermission) return@LaunchedEffect
 
     while (isLiveAnalysisActive) {
       val frameToAnalyze = latestFrameBitmap
       if (frameToAnalyze != null && !isAnalyzing) {
-        isAnalyzing = true
-        coroutineScope.launch(Dispatchers.IO) {
-          val result = analyzer.analyzeFrame(frameToAnalyze)
-          latestResult = result
-          analyzedFramesCount++
-          if (history.size >= 8) history.removeLast()
-          history.add(0, result)
-          isAnalyzing = false
+        var shouldSkipDueToStaticScreen = false
+
+        // Smart Local Motion / Frame Difference Check
+        if (aiConfig.isSmartFilterEnabled && lastAnalyzedBitmap != null) {
+          val diff = FrameDifferenceDetector.calculateDifferencePercent(lastAnalyzedBitmap, frameToAnalyze)
+          currentMotionDiff = diff
+          if (diff < aiConfig.motionThresholdPercent) {
+            shouldSkipDueToStaticScreen = true
+            isScreenStatic = true
+            skippedFramesCount++
+          } else {
+            isScreenStatic = false
+          }
+        }
+
+        if (!shouldSkipDueToStaticScreen) {
+          isAnalyzing = true
+          try {
+            lastAnalyzedBitmap = frameToAnalyze.copy(frameToAnalyze.config ?: Bitmap.Config.ARGB_8888, false)
+          } catch (_: Exception) {}
+
+          coroutineScope.launch(Dispatchers.IO) {
+            val result = analyzer.analyzeFrame(frameToAnalyze, config = aiConfig)
+            latestResult = result
+            analyzedFramesCount++
+            if (history.size >= 8) history.removeLast()
+            history.add(0, result)
+            isAnalyzing = false
+
+            // Audio Co-Pilot Tactical Alert
+            if (aiConfig.isTtsEnabled && result.tacticalAdvice.isNotBlank()) {
+              val isCritical = result.threatLevel == ThreatLevel.CRITICAL
+              audioCoPilot.speakTacticalAdvice(
+                text = if (isCritical) "ภัยวิกฤต! ${result.tacticalAdvice}" else result.tacticalAdvice,
+                isCritical = isCritical
+              )
+            }
+          }
         }
       }
       delay(analysisIntervalMs)
     }
   }
 
+  // Theme styling based on OLED Stealth HUD Mode
+  val screenBg = if (aiConfig.isOledStealthMode) Color.Black else DarkBackground
+  val cardBg = if (aiConfig.isOledStealthMode) Color.Black else DarkSurfaceCard
+  val variantBg = if (aiConfig.isOledStealthMode) Color(0xFF090909) else DarkSurfaceVariant
+
   Column(
     modifier = modifier
       .fillMaxSize()
-      .background(DarkBackground)
+      .background(screenBg)
       .padding(horizontal = 14.dp, vertical = 8.dp)
   ) {
-    // Top Bar: Title + Live Status Pill + Camera Settings
+    // Top Bar: Title + Live Status Pill + Quick Action Toolbar
     Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.SpaceBetween,
@@ -222,7 +387,7 @@ fun CameraScreen(
         Row(verticalAlignment = Alignment.CenterVertically) {
           Surface(
             shape = RoundedCornerShape(6.dp),
-            color = if (isLiveAnalysisActive) SuccessGreen.copy(alpha = 0.2f) else DarkSurfaceVariant,
+            color = if (isLiveAnalysisActive) SuccessGreen.copy(alpha = 0.2f) else variantBg,
             border = androidx.compose.foundation.BorderStroke(
               1.dp,
               if (isLiveAnalysisActive) SuccessGreen else TextMuted
@@ -248,24 +413,109 @@ fun CameraScreen(
               )
             }
           }
-          Spacer(modifier = Modifier.width(8.dp))
+          Spacer(modifier = Modifier.width(6.dp))
           Text(
-            text = "GEMINI 3.5 FLASH",
+            text = aiConfig.selectedModel.uppercase(),
             color = PackAPunchCyan,
-            fontSize = 11.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight.Bold
           )
         }
         Text(
-          text = "REX INFERNUS CO-PILOT",
+          text = if (aiConfig.isOledStealthMode) "STEALTH CO-PILOT (OLED)" else "REX INFERNUS CO-PILOT",
           color = TextPrimary,
-          fontSize = 16.sp,
+          fontSize = 15.sp,
           fontWeight = FontWeight.Black
         )
       }
 
-      // Quick Camera Actions (Torch & Flip)
+      // Quick Actions Toolbar: Torch, Flip, TTS, OLED, Cube, Settings
       Row(verticalAlignment = Alignment.CenterVertically) {
+        // OLED Stealth Mode Quick Toggle
+        IconButton(
+          onClick = {
+            configManager.updateConfig(aiConfig.copy(isOledStealthMode = !aiConfig.isOledStealthMode))
+          },
+          modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(if (aiConfig.isOledStealthMode) PackAPunchCyan.copy(alpha = 0.2f) else variantBg)
+            .testTag("toggle_oled_stealth_button")
+        ) {
+          Icon(
+            imageVector = if (aiConfig.isOledStealthMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+            contentDescription = "OLED Stealth Mode",
+            tint = if (aiConfig.isOledStealthMode) PackAPunchCyan else TextMuted,
+            modifier = Modifier.size(16.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Audio Co-Pilot Voice Quick Toggle
+        IconButton(
+          onClick = {
+            val newTts = !aiConfig.isTtsEnabled
+            configManager.updateConfig(aiConfig.copy(isTtsEnabled = newTts))
+            if (newTts) {
+              audioCoPilot.speakTacticalAdvice("ระบบเสียงนำทางเปิดใช้งาน", force = true)
+            }
+          },
+          modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(if (aiConfig.isTtsEnabled) LightningGold.copy(alpha = 0.2f) else variantBg)
+            .testTag("toggle_tts_button")
+        ) {
+          Icon(
+            imageVector = if (aiConfig.isTtsEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.Default.VolumeOff,
+            contentDescription = "เสียง Co-Pilot",
+            tint = if (aiConfig.isTtsEnabled) LightningGold else TextMuted,
+            modifier = Modifier.size(16.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Aether Cube 3D Visualizer Quick Overlay
+        IconButton(
+          onClick = { showCubeDialog = true },
+          modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(AetherPurple.copy(alpha = 0.25f))
+            .testTag("open_cube_dialog_button")
+        ) {
+          Icon(
+            imageVector = Icons.Default.ViewInAr,
+            contentDescription = "3D Cube Solver",
+            tint = AetherPurple,
+            modifier = Modifier.size(17.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Mini Overlay / Floating HUD Toggle Button
+        IconButton(
+          onClick = { showFloatingHud = !showFloatingHud },
+          modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(if (showFloatingHud) PackAPunchCyan.copy(alpha = 0.25f) else variantBg)
+            .testTag("toggle_floating_hud_button")
+        ) {
+          Icon(
+            imageVector = Icons.Default.PictureInPicture,
+            contentDescription = "Mini Floating HUD",
+            tint = if (showFloatingHud) PackAPunchCyan else TextMuted,
+            modifier = Modifier.size(17.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // Torch toggle
         IconButton(
           onClick = {
             val newTorch = !isTorchOn
@@ -273,21 +523,22 @@ fun CameraScreen(
             cameraControl?.cameraControl?.enableTorch(newTorch)
           },
           modifier = Modifier
-            .size(36.dp)
+            .size(34.dp)
             .clip(CircleShape)
-            .background(DarkSurfaceVariant)
+            .background(variantBg)
             .testTag("toggle_torch_button")
         ) {
           Icon(
             imageVector = if (isTorchOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
             contentDescription = "ไฟฉาย",
             tint = if (isTorchOn) LightningGold else TextMuted,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
           )
         }
 
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
 
+        // Flip camera
         IconButton(
           onClick = {
             cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
@@ -297,16 +548,35 @@ fun CameraScreen(
             }
           },
           modifier = Modifier
-            .size(36.dp)
+            .size(34.dp)
             .clip(CircleShape)
-            .background(DarkSurfaceVariant)
+            .background(variantBg)
             .testTag("switch_camera_button")
         ) {
           Icon(
             imageVector = Icons.Default.Cameraswitch,
             contentDescription = "สลับกล้อง",
             tint = TextPrimary,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
+          )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // AI Engine & API Settings Dialog
+        IconButton(
+          onClick = { showSettingsDialog = true },
+          modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(variantBg)
+            .testTag("open_ai_settings_button")
+        ) {
+          Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = "ตั้งค่า AI",
+            tint = TextPrimary,
+            modifier = Modifier.size(16.dp)
           )
         }
       }
@@ -469,6 +739,21 @@ fun CameraScreen(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
           )
         }
+
+        // Mini Floating HUD Overlay (PIP draggable widget)
+        if (showFloatingHud) {
+          FloatingHudWidget(
+            latestResult = latestResult,
+            houseSymbols = houseSymbols,
+            currentRound = currentRound,
+            isLiveActive = isLiveAnalysisActive,
+            onToggleLive = { isLiveAnalysisActive = !isLiveAnalysisActive },
+            onDismiss = { showFloatingHud = false },
+            modifier = Modifier
+              .align(Alignment.TopEnd)
+              .padding(top = 10.dp, end = 10.dp)
+          )
+        }
       } else {
         // Fallback when camera permission is not granted
         Column(
@@ -555,12 +840,20 @@ fun CameraScreen(
           if (currentBitmap != null && !isAnalyzing) {
             isAnalyzing = true
             coroutineScope.launch(Dispatchers.IO) {
-              val result = analyzer.analyzeFrame(currentBitmap)
+              val result = analyzer.analyzeFrame(currentBitmap, config = aiConfig)
               latestResult = result
               analyzedFramesCount++
               if (history.size >= 8) history.removeLast()
               history.add(0, result)
               isAnalyzing = false
+
+              if (aiConfig.isTtsEnabled && result.tacticalAdvice.isNotBlank()) {
+                val isCrit = result.threatLevel == ThreatLevel.CRITICAL
+                audioCoPilot.speakTacticalAdvice(
+                  text = if (isCrit) "ภัยวิกฤต! ${result.tacticalAdvice}" else result.tacticalAdvice,
+                  isCritical = isCrit
+                )
+              }
             }
           }
         },
@@ -579,7 +872,125 @@ fun CameraScreen(
       }
     }
 
-    Spacer(modifier = Modifier.height(10.dp))
+    Spacer(modifier = Modifier.height(6.dp))
+
+    // Smart Motion Filter & Quota Saver Banner
+    Surface(
+      shape = RoundedCornerShape(10.dp),
+      color = if (isScreenStatic) SuccessGreen.copy(alpha = 0.15f) else variantBg,
+      border = androidx.compose.foundation.BorderStroke(
+        1.dp,
+        if (aiConfig.isSmartFilterEnabled) SuccessGreen.copy(alpha = 0.5f) else Color(0x22FFFFFF)
+      ),
+      modifier = Modifier.fillMaxWidth().testTag("smart_filter_banner")
+    ) {
+      Row(
+        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          Icon(
+            imageVector = Icons.Default.Speed,
+            contentDescription = null,
+            tint = if (aiConfig.isSmartFilterEnabled) SuccessGreen else TextMuted,
+            modifier = Modifier.size(16.dp)
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+              Text(
+                text = if (aiConfig.isSmartFilterEnabled) "SMART FILTER: ข้าม $skippedFramesCount เฟรม" else "SMART FILTER: ปิดใช้งาน",
+                color = if (aiConfig.isSmartFilterEnabled) SuccessGreen else TextMuted,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+              )
+              if (aiConfig.isSmartFilterEnabled) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                  text = "Diff: ${"%.1f".format(currentMotionDiff)}% (เกณฑ์ ${aiConfig.motionThresholdPercent.toInt()}%)",
+                  color = if (isScreenStatic) SuccessGreen else TextSecondary,
+                  fontSize = 10.sp
+                )
+              }
+            }
+            Text(
+              text = if (isScreenStatic) "⚡ จอนิ่ง หยุดยิง API ประหยัดโควตาและลดความร้อน" else "กำลังตรวจจับการเคลื่อนไหวของจอเกม PS5",
+              color = TextMuted,
+              fontSize = 9.sp
+            )
+          }
+        }
+
+        Surface(
+          shape = RoundedCornerShape(6.dp),
+          color = if (aiConfig.isSmartFilterEnabled) SuccessGreen.copy(alpha = 0.25f) else Color(0x22FFFFFF),
+          modifier = Modifier.clickable {
+            configManager.updateConfig(aiConfig.copy(isSmartFilterEnabled = !aiConfig.isSmartFilterEnabled))
+          }
+        ) {
+          Text(
+            text = if (aiConfig.isSmartFilterEnabled) "เปิดอยู่" else "ปิดอยู่",
+            color = if (aiConfig.isSmartFilterEnabled) SuccessGreen else TextMuted,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+          )
+        }
+      }
+    }
+
+    // Voice Commands Hands-Free Indicator (if enabled)
+    if (aiConfig.isVoiceCommandEnabled) {
+      Spacer(modifier = Modifier.height(4.dp))
+      Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = LightningGold.copy(alpha = 0.12f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, LightningGold.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth().testTag("voice_command_hud")
+      ) {
+        Row(
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Mic, contentDescription = null, tint = LightningGold, modifier = Modifier.size(15.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Column {
+              Text(
+                text = "สั่งงานด้วยเสียง (Hands-Free): เปิดใช้งาน",
+                color = LightningGold,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Text(
+                text = "พูด: \"สแกน\", \"หยุด\", \"ต่อ\", \"จด\", \"สูตรบอส\", \"ต่อไป\"",
+                color = TextSecondary,
+                fontSize = 9.sp
+              )
+            }
+          }
+
+          if (lastVoiceCommandName != null) {
+            Surface(
+              shape = RoundedCornerShape(6.dp),
+              color = LightningGold.copy(alpha = 0.25f)
+            ) {
+              Text(
+                text = "คำสั่ง: $lastVoiceCommandName",
+                color = LightningGold,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+              )
+            }
+          }
+        }
+      }
+    }
+
+    Spacer(modifier = Modifier.height(8.dp))
 
     // Real-Time Tactical AI Feedback Feed
     LazyColumn(
@@ -592,7 +1003,7 @@ fun CameraScreen(
         if (result != null) {
           Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = DarkSurfaceCard),
+            colors = CardDefaults.cardColors(containerColor = cardBg),
             border = androidx.compose.foundation.BorderStroke(
               1.dp,
               when (result.threatLevel) {
@@ -800,7 +1211,7 @@ fun CameraScreen(
           val itemResult = history[index + 1]
           Surface(
             shape = RoundedCornerShape(10.dp),
-            color = DarkSurfaceVariant,
+            color = variantBg,
             modifier = Modifier.fillMaxWidth()
           ) {
             Row(
@@ -844,5 +1255,25 @@ fun CameraScreen(
         }
       }
     }
+  }
+
+  // AI Configuration Settings Dialog
+  if (showSettingsDialog) {
+    AiSettingsDialog(
+      currentConfig = aiConfig,
+      onSaveConfig = { newConfig ->
+        configManager.updateConfig(newConfig)
+        showSettingsDialog = false
+      },
+      onDismiss = { showSettingsDialog = false }
+    )
+  }
+
+  // Interactive 3D Aether Cube Solver Overlay Dialog
+  if (showCubeDialog) {
+    AetherCubeCalculatorDialog(
+      initialStep = 0,
+      onDismiss = { showCubeDialog = false }
+    )
   }
 }
