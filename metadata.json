@@ -1,0 +1,6 @@
+{
+  "name": "BO7 Zombies Guide",
+  "description": "Rex Infernus live main quest walkthrough, survival strategy, puzzle solver, and boss guide for Call of Duty Zombies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
